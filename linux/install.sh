@@ -2,10 +2,14 @@
 # Install OSAI on an existing Linux system (Ubuntu/Debian, Fedora, Arch, openSUSE).
 #   sudo linux/install.sh            -> adds an "OSAI" session to your login screen
 #   sudo linux/install.sh --autostart -> also starts OSAI (mini avatar) inside your normal desktop at login
+#   sudo linux/install.sh --local-ai  -> also sets up the free on-device AI (Qwen3.5, no API key needed)
 set -euo pipefail
 SRC=$(cd "$(dirname "$0")/.." && pwd)
 PREFIX=/opt/osai
-AUTOSTART=0; [ "${1:-}" = "--autostart" ] && AUTOSTART=1
+AUTOSTART=0 LOCAL_AI=0
+for a in "$@"; do
+  case "$a" in --autostart) AUTOSTART=1 ;; --local-ai) LOCAL_AI=1 ;; esac
+done
 [ "$(id -u)" = 0 ] || { echo "run with sudo"; exit 1; }
 TARGET_USER=${SUDO_USER:-$(logname 2>/dev/null || echo root)}
 
@@ -57,6 +61,12 @@ EOT
   chown -R "$TARGET_USER" "$H/.config/autostart"
 fi
 
+ln -sf "$PREFIX/src/linux/osai-local-ai" /usr/local/bin/osai-local-ai
+if [ "$LOCAL_AI" = 1 ]; then
+  echo "==> Setting up the free local AI"
+  "$PREFIX/src/linux/osai-local-ai"
+fi
+
 echo
 echo "Done. Log out and pick the \"OSAI\" session on the login screen, or run:  osai"
-echo "Add your Anthropic API key in OSAI's settings (gear icon) the first time."
+echo "Free local AI: sudo osai-local-ai (if you didn't pass --local-ai). Or add an Anthropic key in Settings for Claude."

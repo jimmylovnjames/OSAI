@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# Set up OSAI's free, on-device brain: llama.cpp's llama-server + Qwen3.5 (tool calling + vision), as a service.
+#
+#   sudo linux/osai-local-ai            # picks Qwen3.5-9B with >= 15 GB RAM, else Qwen3.5-4B
+#   sudo MODEL=4b linux/osai-local-ai   # force a size (4b | 9b)
+#   sudo ROOT=/path/to/chroot NO_SERVICE_START=1 linux/osai-local-ai   # used by the image builder
+#
+# Downloads ~3.4 GB (4B) or ~6.6 GB (9B). Models: unsloth's GGUF builds of Qwen/Qwen3.5 (Apache-2.0).
+set -euo pipefail
+
+ROOT=${ROOT:-}
+PREFIX=$ROOT/opt/osai
+MODEL=${MODEL:-auto}
+PORT=${PORT:-8080}
+CTX=${CTX:-32768}
+
+[ "$(id -u)" = 0 ] || { echo "run with sudo"; exit 1; }
+[ "$(uname -m)" = x86_64 ] || { echo "only x86-64 is supported by this script for now"; exit 1; }
+command -v curl >/dev/null && command -v unzip >/dev/null || { echo "needs curl and unzip"; exit 1; }
+
+if [ "$MODEL" = auto ]; then
+  ram_gb=$(awk '/MemTotal/ {print int($2 / 1024 / 1024)}' /proc/meminfo)
+  MODEL=$([ "$ram_gb" -ge 15 ] && echo 9b || echo 4b)
+fi
+case "$MODEL" in
+  4b) REPO=unsloth/Qwen3.5-4B-GGUF FILE=Qwen3.5-4B-Q4_K_M.gguf ALIAS=qwen3.5-4b ;;
+  9b) REPO=unsloth/Qwen3.5-9B-GGUF FILE=Qwen3.5-9B-Q4_K_M.gguf ALIAS=qwen3.5-9b ;;
+  *) echo "MODEL must be 4b or 9b"; exit 1 ;;
+esac
+HF=https://huggingface.co/$REPO/resolve/main
+
+echo "==> llama.cpp server"
+mkdir -p "$PREFIX/llama" "$PREFIX/models"
+if [ ! -x "$PREFIX/llama/llama-server" ]; then
+  # Vulkan build uses any GPU and falls back to the CPU; the plain build is CPU-only.
+  flavor=ubuntu-x64
+  [ -e /dev/dri/renderD128 ] && [ -z "$ROOT" ] && flavor=ubuntu-vulkan-x64
+  url=$(curl -fsSL https://api.github.com/repos/ggml-org/llama.cpp/releases/latest \
+        | grep -o "https://[^\"]*-bin-$flavor\.zip" | head -1)
+  [ -n "$url" ] || { echo "could not find a llama.cpp release for $flavor"; exit 1; }
+  tmp=$(mktemp -d)
+  curl -fL --retry 3 -o "$tmp/llama.zip" "$url"
+  unzip -q "$tmp/llama.zip" -d "$tmp/x"
+  server=$(find "$tmp/x" -name llama-server -type f | head -1)
+  cp -a "$(dirname "$server")"/. "$PREFIX/llama/"
+  chmod +x "$PREFIX/llama/llama-server"
+  rm -rf "$tmp"
+fi
+
+echo "==> $ALIAS model (this is the big download)"
+fetch() {  # resumable download of $HF/$1 to $2
+  [ -s "$2" ] && return 0
+  curl -fL --retry 5 -C - -o "$2.part" "$HF/$1" && mv -f "$2.part" "$2"
+  [ -s "$2" ] || { echo "download failed: $1"; exit 1; }
+}
+fetch "$FILE" "$PREFIX/models/$FILE"
+fetch mmproj-F16.gguf "$PREFIX/models/${ALIAS}-mmproj-F16.gguf"
+
+echo "==> service"
+cat > "$ROOT/etc/systemd/system/osai-llm.service" <<EOF
+[Unit]
+Description=OSAI local AI (llama.cpp server, $ALIAS)
+After=network.target
+
+[Service]
+ExecStart=/opt/osai/llama/llama-server --model /opt/osai/models/$FILE --mmproj /opt/osai/models/${ALIAS}-mmproj-F16.gguf \\
+  --alias $ALIAS --jinja --ctx-size $CTX --n-gpu-layers 999 --host 127.0.0.1 --port $PORT
+Environment=LD_LIBRARY_PATH=/opt/osai/llama
+Restart=on-failure
+RestartSec=3
+DynamicUser=yes
+Nice=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+mkdir -p "$ROOT/etc/osai"
+printf '{"local": {"base_url": "http://127.0.0.1:%s/v1", "model": "%s"}}\n' "$PORT" "$ALIAS" > "$ROOT/etc/osai/local-ai.json"
+chmod -R a+rX "$PREFIX/llama" "$PREFIX/models"
+
+if [ -n "$ROOT" ]; then
+  chroot "$ROOT" systemctl enable osai-llm.service >/dev/null 2>&1 || ln -sf /etc/systemd/system/osai-llm.service "$ROOT/etc/systemd/system/multi-user.target.wants/osai-llm.service"
+elif [ -z "${NO_SERVICE_START:-}" ]; then
+  systemctl daemon-reload
+  systemctl enable --now osai-llm.service
+  echo "==> waiting for the model to load"
+  for _ in $(seq 1 120); do curl -fs "http://127.0.0.1:$PORT/health" >/dev/null 2>&1 && break; sleep 2; done
+  curl -fs "http://127.0.0.1:$PORT/health" >/dev/null && echo "Local AI ready: $ALIAS on port $PORT" || echo "Started; still loading - check: journalctl -u osai-llm"
+fi
+echo "OSAI uses it automatically when no Anthropic key is set (Settings -> Brain to choose)."

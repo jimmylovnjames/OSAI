@@ -16,11 +16,12 @@ MIRROR=${MIRROR:-http://archive.ubuntu.com/ubuntu}
 FLAVOR=${FLAVOR:-full}
 CHROMIUM_DIR=${CHROMIUM_DIR:-}
 WHISPER_MODEL=${WHISPER_MODEL-base.en}  # set empty to skip
+LOCAL_AI=${LOCAL_AI:-4b}  # free on-device brain baked into the image: 4b (+3.4 GB) | 9b (+6.6 GB) | none
 ROOT=$WORK/chroot
 
 [ "$(id -u)" = 0 ] || { echo "run as root (sudo)"; exit 1; }
-for t in debootstrap mksquashfs grub-mkrescue xorriso mformat; do
-  command -v $t >/dev/null || { echo "missing $t: apt-get install debootstrap squashfs-tools xorriso grub-pc-bin grub-efi-amd64-bin mtools"; exit 1; }
+for t in debootstrap mksquashfs grub-mkrescue xorriso mformat curl unzip; do
+  command -v $t >/dev/null || { echo "missing $t: apt-get install debootstrap squashfs-tools xorriso grub-pc-bin grub-efi-amd64-bin mtools curl unzip"; exit 1; }
 done
 
 log() { printf '\n\033[1;35m==> %s\033[0m\n' "$*"; }
@@ -111,6 +112,7 @@ if [ -n "$WHISPER_MODEL" ]; then
     && chmod -R a+rX /opt/osai/hf || echo "WARNING: whisper model not baked in; it downloads on first use"
 fi
 ln -sf /opt/osai/venv/bin/osai /usr/local/bin/osai
+ln -sf /opt/osai/src/linux/osai-local-ai /usr/local/bin/osai-local-ai
 
 # Live user "osai" (created by casper at boot) logs in on tty1 and starts the OSAI session.
 cat > /etc/casper.conf <<EOF
@@ -146,6 +148,12 @@ apt-get clean
 rm -f /etc/resolv.conf  # NetworkManager writes the real one at boot
 rm -rf /var/lib/apt/lists/* /tmp/* /root/.cache
 CHROOT
+
+if [ "$LOCAL_AI" != none ]; then
+  log "Adding the free local AI ($LOCAL_AI)"
+  ROOT="$ROOT" MODEL="$LOCAL_AI" "$SRC/linux/osai-local-ai" \
+    || echo "WARNING: local AI not added (download failed?); the image will need an Anthropic key or a later 'sudo osai-local-ai'"
+fi
 
 umount_all
 

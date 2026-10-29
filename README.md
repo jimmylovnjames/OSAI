@@ -28,13 +28,26 @@ headphones". It operates the whole computer for you: apps, files, windows, setti
 
 | Where | How |
 |---|---|
-| **Any PC, as the whole OS** | Build the live ISO (`sudo linux/build-iso.sh`), write it to a USB stick, boot. Boots straight into OSAI on BIOS and UEFI machines. |
-| **Existing Linux** | `sudo linux/install.sh` → pick the **OSAI** session at the login screen. `--autostart` also runs OSAI inside your usual desktop. |
+| **Any PC, as the whole OS** | Build the live ISO (`sudo linux/build-iso.sh`), write it to a USB stick, boot. Boots straight into OSAI on BIOS and UEFI machines; **Install OSAI** (top bar) puts it on the disk. |
+| **Existing Linux** | `sudo linux/install.sh --local-ai` → pick the **OSAI** session at the login screen. `--autostart` also runs OSAI inside your usual desktop. |
 | **macOS** | `scripts/install-macos.sh` (starts at login; grant Accessibility, Screen Recording, Microphone when asked). |
 | **Windows 10/11** | `powershell -ExecutionPolicy Bypass -File scripts\install-windows.ps1` (starts at sign-in). |
 | **Just try it** | `pip install -e ".[browser,desktop]" && playwright install chromium && osai` |
 
-Then open settings (⚙) → **Brain** → paste an Anthropic API key (or set `ANTHROPIC_API_KEY`).
+## Free or Claude: pick a brain
+
+OSAI runs **free, on your own computer** with an open model, or on **Claude** (paid, stronger on long tasks).
+Settings (⚙) → **Brain**; the default "Automatic" uses Claude when an API key is set and the free model otherwise.
+
+| Brain | Model | Needs | Cost |
+|---|---|---|---|
+| Free local AI (default without a key) | [Qwen3.5-4B](https://huggingface.co/Qwen/Qwen3.5-4B) (8 GB RAM) or [Qwen3.5-9B](https://huggingface.co/Qwen/Qwen3.5-9B) (16 GB RAM / 8 GB GPU), via llama.cpp | `sudo osai-local-ai` (picks the size from your RAM; ~3.4 / 6.6 GB download); built into the ISO by default | Free |
+| Claude | Opus 5.5 (default), Sonnet 5.5, Haiku 5.5 | An Anthropic API key | Per request |
+
+Qwen3.5 is the smallest open model family with both reliable tool calling and vision (OSAI drives apps from
+screenshots); below ~4B parameters multi-step computer control gets unreliable. Any OpenAI-compatible server
+works (Ollama, LM Studio, vLLM): set its URL and model name in Settings → Brain. Expect simple commands to work
+well locally and long screen-driving tasks to fail more often than with Claude.
 
 `osai --cli` gives you a terminal-only OSAI (useful over SSH or on a headless box).
 

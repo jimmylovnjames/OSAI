@@ -236,7 +236,7 @@ function handle(ev) {
       if (!ev.replay) {
         $("#caption-ai").classList.remove("thinking"); $("#caption-ai").textContent = ev.text;
         avatar.setState("error"); voice.replyDone = true; voice.say(ev.text);
-        if (ev.code === "auth") openSettings("brain");
+        if (ev.code === "auth" || ev.code === "local") openSettings("brain");
       }
       break;
     case "reset": feed.innerHTML = ""; $("#cards").innerHTML = ""; $("#caption-user").textContent = ""; $("#caption-ai").textContent = "Fresh start. What's next?"; break;
@@ -321,6 +321,7 @@ async function pollStatus() {
     $("#ind-net").textContent = s.online ? "● Online" : "○ Offline";
     $("#ind-bat").textContent = s.battery ? `${s.battery.plugged ? "⚡" : "▮"} ${s.battery.percent}%` : "";
     $("#btn-install").hidden = !s.live || MINI;
+    $("#brain-status").textContent = s.brain === "local" ? `Using free local AI: ${s.brain_model}.` : `Using Claude: ${s.brain_model}.`;
   } catch {}
 }
 function tickClock() {

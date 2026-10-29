@@ -12,7 +12,7 @@ from tests.fakes import FakeClient, text, tool_use
 def make(tmp_path, turns, errors=None, autonomy="ask"):
     events = []
     cfg = Config(tmp_path / "config.json")
-    cfg.update({"autonomy": autonomy})
+    cfg.update({"autonomy": autonomy, "provider": "anthropic"})
     client = FakeClient(turns, errors)
     agent = Agent(cfg, Memory(tmp_path / "mem.json"), events.append, {}, client_factory=lambda: client)
     return agent, client, events

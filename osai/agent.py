@@ -9,12 +9,14 @@ import asyncio
 import datetime as dt
 import inspect
 import json
+import os
 import uuid
 from typing import Any, Awaitable, Callable
 
 import anthropic
 
 from . import osinfo
+from .local_brain import LocalBrainError, LocalClient
 from .tools import REGISTRY, ToolContext, ToolError, normalize_result
 
 Emit = Callable[[dict], Awaitable[None] | None]
@@ -35,8 +37,7 @@ many tool calls as needed. If one approach fails, diagnose and try another (a di
 installing what's missing, or seeing the screen and using mouse/keyboard).
 - Prefer the most direct, reliable route: dedicated tools > shell commands > the built-in browser > driving the GUI \
 with see_screen + mouse/keyboard. After GUI actions, look at the screen again to verify.
-- For quick facts or current information use web_search / web_fetch. For interactive web tasks (accounts, forms, \
-web apps, shopping) use the browser_* tools; the user can see that browser window.
+- {web_line}
 - Your replies are spoken aloud. Keep them to one to three short, natural sentences, no markdown, no lists, no URLs \
 read out. When there is a lot to show (lists, tables, long text, comparisons), put it on screen with show_card and \
 speak a one-line summary.
@@ -83,14 +84,28 @@ class Agent:
         if inspect.isawaitable(r):
             await r
 
+    def provider(self) -> str:
+        """'anthropic' (Claude) or 'local' (free, on-device). 'auto' = Claude when a key is configured."""
+        p = self.config.get("provider", "auto")
+        if p == "auto":
+            has_key = self.config.get("api_key") or os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")
+            return "anthropic" if has_key else "local"
+        return p
+
     @property
     def client(self):
-        key = self.config.get("api_key") or None
+        provider = self.provider()
+        key = json.dumps([provider, self.config.get("api_key"), self.config.get("local")], sort_keys=True, default=str)
         if self._client is None or key != self._client_key:
+            if self._client_key is not None and json.loads(self._client_key)[0] != provider:
+                self.messages = []  # each brain stores its turns in its own shape
             if self._client_factory:
                 self._client = self._client_factory()
+            elif provider == "local":
+                self._client = LocalClient(self.config.get("local") or {})
             else:
-                self._client = anthropic.AsyncAnthropic(api_key=key) if key else anthropic.AsyncAnthropic()
+                api_key = self.config.get("api_key") or None
+                self._client = anthropic.AsyncAnthropic(api_key=api_key) if api_key else anthropic.AsyncAnthropic()
             self._client_key = key
         return self._client
 
@@ -103,13 +118,18 @@ class Agent:
             name=self.config["assistant_name"],
             personality=av.get("personality", ""),
             machine=osinfo.describe(),
+            web_line=("For quick facts or current information use web_search / web_fetch. For interactive web tasks "
+                      "(accounts, forms, web apps, shopping) use the browser_* tools; the user can see that browser window."
+                      if self.provider() == "anthropic" else
+                      "For current information, search with browser_open (plain words search the web) and read the "
+                      "results; the user can see that browser window."),
             memory=(f"Their name: {self.config['user_name']}\n" if self.config.get("user_name") else "") + self.memory.render(),
         )
         return [{"type": "text", "text": text, "cache_control": {"type": "ephemeral"}}]
 
     def tool_definitions(self) -> list[dict]:
         defs = [t.definition() for t in REGISTRY.values()]
-        if self.config.get("server_web_tools", True) and "server_web_tools" not in self._disabled:
+        if self.provider() == "anthropic" and self.config.get("server_web_tools", True) and "server_web_tools" not in self._disabled:
             defs += [{"type": "web_search_20260209", "name": "web_search"},
                      {"type": "web_fetch_20260209", "name": "web_fetch"}]
         return defs
@@ -237,6 +257,10 @@ class Agent:
                 return
             except anthropic.APIStatusError as e:
                 await self.emit({"type": "error", "text": f"API error {e.status_code}: {e.message}"})
+                return
+            except LocalBrainError as e:
+                await self.emit({"type": "error", "code": "local", "text": str(e) + (
+                    " Set it up with: sudo osai-local-ai — or add an Anthropic key in Settings." if "can't reach" in str(e) else "")})
                 return
             except anthropic.APIConnectionError:
                 await self.emit({"type": "error", "code": "offline", "text": "I can't reach the AI service. Check the internet connection."})

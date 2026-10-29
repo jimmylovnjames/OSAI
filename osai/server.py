@@ -149,7 +149,9 @@ def create_app(config: Config | None = None, client_factory=None) -> FastAPI:
 
     @app.get("/api/status")
     async def status():
+        brain = agent.provider()
         return status_snapshot() | {"busy": agent.busy, "schedule": scheduler.items, "live": installer_mod.is_live(),
+                                    "brain": brain, "brain_model": config["local"].get("model") if brain == "local" else config["model"],
                                     "screens": len(hub.clients) - len(hub.mini), "mini_screens": len(hub.mini)}
 
     @app.get("/install")

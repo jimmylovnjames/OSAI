@@ -22,6 +22,18 @@ WALLPAPERS = ["aurora", "nebula", "sunset", "ocean", "mono", "matrix"]
 DEFAULTS: dict[str, Any] = {
     "assistant_name": "OSAI",
     "user_name": "",
+    # auto: Claude when an Anthropic key is configured, otherwise the free local model
+    "provider": "auto",
+    "local": {
+        "base_url": "http://127.0.0.1:8080/v1",  # llama-server; Ollama is http://127.0.0.1:11434/v1
+        "model": "qwen3.5-4b",
+        "api_key": "",
+        "thinking": False,
+        "vision": True,
+        "context_tokens": 32768,
+        "max_tokens": 4096,
+        "temperature": 0.6,
+    },
     "model": "claude-opus-5-5",
     "effort": "medium",
     "autonomy": "ask",  # "ask": confirm risky actions; "full": never ask
@@ -69,9 +81,16 @@ class Config:
         self.path = path or HOME / "config.json"
         self._lock = threading.Lock()
         self.data = copy.deepcopy(DEFAULTS)
+        # System-wide defaults (e.g. the local AI the image or linux/osai-local-ai set up), then the user's own.
+        system_dir = Path(os.environ.get("OSAI_SYSTEM_CONFIG", "/etc/osai"))
+        for f in sorted(system_dir.glob("*.json")) if system_dir.is_dir() else []:
+            try:
+                self.data = _merge(self.data, json.loads(f.read_text()))
+            except (OSError, json.JSONDecodeError):
+                pass
         if self.path.exists():
             try:
-                self.data = _merge(DEFAULTS, json.loads(self.path.read_text()))
+                self.data = _merge(self.data, json.loads(self.path.read_text()))
             except (OSError, json.JSONDecodeError):
                 pass
 

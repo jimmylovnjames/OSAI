@@ -56,7 +56,7 @@ def parse_disks(lsblk_json: str, boot_disks: set[str]) -> list[dict]:
     """Turn `lsblk -J -b -d` output into installer choices, each with a reason when it can't be used."""
     out = []
     for d in json.loads(lsblk_json).get("blockdevices", []):
-        if d.get("type") != "disk" or str(d.get("name", "")).startswith(("zram", "ram", "loop")):
+        if d.get("type") != "disk" or str(d.get("name", "")).startswith(("zram", "ram", "loop", "fd")):
             continue
         size = int(d.get("size") or 0)
         path = d.get("path") or f"/dev/{d['name']}"

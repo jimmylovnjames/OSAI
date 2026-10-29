@@ -89,6 +89,15 @@
   </div>
 
   <div class="tab" data-tab="brain" hidden>
+    <p class="muted" id="brain-status"></p>
+    <label>Brain <select data-k="provider">
+      <option value="auto">Automatic — Claude if a key is set, otherwise free local AI</option>
+      <option value="local">Free local AI (runs on this computer)</option>
+      <option value="anthropic">Claude (Anthropic API, paid)</option>
+    </select></label>
+    <label>Local AI server <input data-k="local.base_url" placeholder="http://127.0.0.1:8080/v1"></label>
+    <label>Local model name <input data-k="local.model" placeholder="qwen3.5-4b"></label>
+    <label class="check"><input type="checkbox" data-k="local.thinking"> Local AI thinks before answering (smarter, slower)</label>
     <label>Anthropic API key <input type="password" data-k="api_key" placeholder="sk-ant-…" autocomplete="off"></label>
     <p class="muted" id="key-status"></p>
     <label>Model <select data-k="model">
