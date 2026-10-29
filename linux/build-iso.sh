@@ -134,6 +134,10 @@ if [ -z "$DISPLAY" ] && [ "$(tty)" = /dev/tty1 ]; then
 fi
 EOF
 mkdir -p /usr/share/xsessions && cp /opt/osai/src/linux/osai.desktop /usr/share/xsessions/
+# Ubuntu leaves wired devices unmanaged unless netplan hands them to NetworkManager, and points DNS at
+# systemd-resolved (not in this image): without these, wired networking stays down on the live system.
+touch /etc/NetworkManager/conf.d/10-globally-managed-devices.conf
+printf '[main]\ndns=default\nrc-manager=file\n' > /etc/NetworkManager/conf.d/90-osai.conf
 systemctl enable NetworkManager >/dev/null 2>&1 || true
 
 update-initramfs -u
