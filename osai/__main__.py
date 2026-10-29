@@ -17,52 +17,82 @@ import time
 import webbrowser
 
 
+def _status(url: str) -> dict | None:
+    import json
+    import urllib.request
+    try:
+        with urllib.request.urlopen(url + "api/status", timeout=2) as r:
+            return json.load(r)
+    except Exception:
+        return None
+
+
 def _wait_for_server(url: str, timeout: float = 120) -> None:
     """Block until the local server answers. Slow machines can take far longer than a fixed delay."""
-    import urllib.request
     deadline = time.time() + timeout
-    while time.time() < deadline:
-        try:
-            urllib.request.urlopen(url + "api/status", timeout=2).close()
-            return
-        except Exception:
-            time.sleep(0.5)
+    while time.time() < deadline and _status(url) is None:
+        time.sleep(0.5)
 
 
 def _server_running(url: str) -> bool:
-    import urllib.request
-    try:
-        urllib.request.urlopen(url + "api/status", timeout=2).close()
-        return True
-    except Exception:
-        return False
+    return _status(url) is not None
+
+
+def _find_chrome() -> str | None:
+    candidates = [os.environ.get("OSAI_CHROMIUM"), shutil.which("chromium"), shutil.which("chromium-browser"),
+                  shutil.which("google-chrome"), shutil.which("microsoft-edge"),
+                  r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                  r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+                  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"]
+    return next((c for c in candidates if c and os.path.exists(c)), None)
 
 
 def _open_screen(url: str, kiosk: bool, mini: bool) -> None:
+    """Open the OSAI screen (and optional mini avatar) and make sure each one actually connects.
+
+    On slow machines Chromium can lose its first navigation (e.g. its network service is restarted
+    during startup) and sit on a blank page forever, so a screen that hasn't connected gets relaunched.
+    """
     _wait_for_server(url)
-    chrome = os.environ.get("OSAI_CHROMIUM") or shutil.which("chromium") or shutil.which("chromium-browser") or shutil.which("google-chrome") \
-        or shutil.which("microsoft-edge") or (r"C:\Program Files\Google\Chrome\Application\chrome.exe"
-                                              if os.path.exists(r"C:\Program Files\Google\Chrome\Application\chrome.exe") else None) \
-        or ("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-            if os.path.exists("/Applications/Google Chrome.app") else None)
-    if chrome:
-        base = [chrome, f"--user-data-dir={os.path.expanduser('~/.osai/shell-profile')}", "--no-first-run",
-                "--autoplay-policy=no-user-gesture-required", "--use-fake-ui-for-media-stream",
-                "--disable-infobars", "--no-default-browser-check", "--test-type", "--disable-features=Translate,MediaRouter"]
-        base += os.environ.get("OSAI_CHROMIUM_FLAGS", "").split()
-        if hasattr(os, "geteuid") and os.geteuid() == 0:
-            base.append("--no-sandbox")  # Chromium refuses to start as root otherwise
-        log_path = os.path.join(os.environ.get("OSAI_HOME", os.path.expanduser("~/.osai")), "shell.log")
-        os.makedirs(os.path.dirname(log_path), exist_ok=True)
-        log = open(log_path, "ab")
-        subprocess.Popen(base + ["--class=OSAIShell"] + (["--kiosk", url] if kiosk else [f"--app={url}", "--start-maximized"]),
-                         stdout=log, stderr=log, start_new_session=os.name != "nt")
-        if mini:
-            subprocess.Popen(base[:1] + base[2:] + [f"--user-data-dir={os.path.expanduser('~/.osai/mini-profile')}", "--class=OSAIMini",
-                                                    f"--app={url}?mini=1", "--window-size=240,300"],
-                             stdout=log, stderr=log, start_new_session=os.name != "nt")
-    else:
+    chrome = _find_chrome()
+    if not chrome:
         webbrowser.open(url)
+        return
+    home = os.environ.get("OSAI_HOME", os.path.expanduser("~/.osai"))
+    os.makedirs(home, exist_ok=True)
+    log = open(os.path.join(home, "shell.log"), "ab")
+    common = ["--no-first-run", "--autoplay-policy=no-user-gesture-required", "--use-fake-ui-for-media-stream",
+              "--disable-infobars", "--no-default-browser-check", "--test-type",
+              "--disable-features=Translate,MediaRouter"] + os.environ.get("OSAI_CHROMIUM_FLAGS", "").split()
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        common.append("--no-sandbox")  # Chromium refuses to start as root otherwise
+    screens = {"screens": [chrome, f"--user-data-dir={os.path.join(home, 'shell-profile')}", "--class=OSAIShell", *common,
+                           *(["--kiosk", url] if kiosk else [f"--app={url}", "--start-maximized"])]}
+    if mini:
+        screens["mini_screens"] = [chrome, f"--user-data-dir={os.path.join(home, 'mini-profile')}", "--class=OSAIMini",
+                                   *common, f"--app={url}?mini=1", "--window-size=240,300"]
+
+    def launch(argv):
+        return subprocess.Popen(argv, stdout=log, stderr=log, start_new_session=os.name != "nt")
+
+    procs = {k: launch(v) for k, v in screens.items()}
+    for attempt in range(3):
+        deadline = time.time() + 90
+        while time.time() < deadline:
+            st = _status(url) or {}
+            if all(st.get(k, 0) > 0 for k in screens):
+                return
+            time.sleep(2)
+        st = _status(url) or {}
+        for k, argv in screens.items():
+            if st.get(k, 0) == 0:
+                print(f"[osai] {k} did not connect; relaunching (attempt {attempt + 2})", flush=True)
+                procs[k].terminate()
+                try:
+                    procs[k].wait(10)
+                except subprocess.TimeoutExpired:
+                    procs[k].kill()
+                procs[k] = launch(argv)
 
 
 async def _cli() -> None:

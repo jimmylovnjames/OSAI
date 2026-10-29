@@ -148,7 +148,8 @@ def create_app(config: Config | None = None, client_factory=None) -> FastAPI:
 
     @app.get("/api/status")
     async def status():
-        return status_snapshot() | {"busy": agent.busy, "schedule": scheduler.items}
+        return status_snapshot() | {"busy": agent.busy, "schedule": scheduler.items,
+                                    "screens": len(hub.clients) - len(hub.mini), "mini_screens": len(hub.mini)}
 
     @app.post("/api/listen")
     async def listen(request: Request):
