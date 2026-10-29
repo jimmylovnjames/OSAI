@@ -20,6 +20,10 @@ if [ -z "$OSAI_CHROMIUM" ]; then
   [ -z "$OSAI_CHROMIUM" ] && OSAI_CHROMIUM="$(ls -d "$OSAI_PREFIX"/browsers/chromium-*/chrome-linux*/chrome 2>/dev/null | tail -1)"
 fi
 export OSAI_CHROMIUM
+# Virtual machines usually expose no usable GPU to Chromium (pages paint blank): render in software.
+if command -v systemd-detect-virt >/dev/null && systemd-detect-virt --vm -q; then
+  export OSAI_CHROMIUM_FLAGS="--disable-gpu ${OSAI_CHROMIUM_FLAGS:-}"
+fi
 export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-$OSAI_PREFIX/browsers}"
 
 xsetroot -solid "#07060f" 2>/dev/null

@@ -4,6 +4,7 @@ When neither is installed, the UI falls back to the browser's Web Speech API.
 """
 from __future__ import annotations
 
+import importlib.util
 import os
 import subprocess
 import tempfile
@@ -16,11 +17,9 @@ _whisper_lock = threading.Lock()
 
 
 def stt_available() -> bool:
-    try:
-        import faster_whisper  # noqa: F401
-        return True
-    except ImportError:
-        return False
+    # find_spec, not import: importing pulls in numpy/ctranslate2, which can kill the
+    # whole process with SIGILL on CPUs without SSE4.2/AVX instead of raising ImportError.
+    return importlib.util.find_spec("faster_whisper") is not None
 
 
 def transcribe(audio: bytes, model_name: str = "base.en", suffix: str = ".webm") -> str:

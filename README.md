@@ -93,12 +93,21 @@ Every request is a Claude API call; tool-heavy tasks take several round-trips. T
 are prompt-cached. Default model is Claude Opus 5.5 at medium effort; in settings you can pick Sonnet 5.5 or
 Haiku 5.5 (much cheaper, faster) and lower effort for snappier replies.
 
+## Hardware
+
+64-bit x86 PC with SSE4.2/AVX (any Intel/AMD from roughly the last 10-12 years), 4 GB RAM, internet for the AI.
+In a virtual machine, pass the host CPU through (VirtualBox/VMware do by default; QEMU: `-cpu host` or
+`-cpu max`); QEMU's default `qemu64` CPU lacks those instructions and Chromium/NumPy crash on it. Inside VMs
+OSAI automatically renders without the GPU.
+
 ## Status / known gaps
 
-- The ISO builder is verified in this repo's CI-less build environment only for the `FLAVOR=vm` image; real
-  hardware support depends on Ubuntu 24.04's drivers (the `full` flavor includes all firmware).
+- Verified here: unit/integration tests; the real Anthropic SDK request/stream/tool round-trip against a local
+  mock of the Messages API; every desktop tool against a real X server; the full Openbox session layout; the
+  ISO building and booting in QEMU to autologin + X + the OSAI server. Not verified here: a live Claude call
+  (no API key in the build environment), real audio hardware, real GPUs, macOS and Windows.
 - The live ISO doesn't persist changes unless you boot the "keep my changes" entry with a `writable` partition;
   there's no graphical install-to-disk yet.
 - Wayland: window listing/focus and synthetic input use X11 tools; the OSAI session runs on X11. Under a
   Wayland desktop, OSAI still works for everything else and falls back to shell commands.
-- Windows/macOS tool paths are implemented but have had less testing than Linux.
+- On-device speech recognition downloads its Whisper model on first use unless it was baked into the image.

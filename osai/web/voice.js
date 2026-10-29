@@ -23,7 +23,7 @@ export class Voice {
 
   sttMode() {
     const m = this.cfg.stt || "auto";
-    if (m === "server" || (m === "auto" && this.serverCaps.server_stt)) return "server";
+    if (m === "server" || (m === "auto" && this.serverCaps.server_stt) || (this.browserBroken && this.serverCaps.server_stt)) return "server";
     if (this.SR) return "browser";
     return this.serverCaps.server_stt ? "server" : "none";
   }
@@ -37,10 +37,21 @@ export class Voice {
     this.listening = true;
     this.onListening(true);
     try {
-      const text = mode === "server" ? await this.recordAndTranscribe() : await this.browserRecognize();
+      let text;
+      try {
+        text = mode === "server" ? await this.recordAndTranscribe() : await this.browserRecognize();
+      } catch (e) {
+        // Chromium builds without Google speech keys fail with "network": use on-device Whisper when present.
+        if (mode !== "browser" || !this.serverCaps.server_stt) throw e;
+        this.browserBroken = true;
+        text = await this.recordAndTranscribe();
+      }
       if (text) this.onTranscript(text, false);
     } catch (e) {
-      this.onInterim(`Didn't catch that (${e.message || e}).`);
+      const why = e.message || e;
+      this.onInterim(why === "network" || why === "service-not-allowed"
+        ? "This browser can't do speech recognition. Install on-device voice (pip install faster-whisper) or type."
+        : `Didn't catch that (${why}).`);
     } finally {
       this.listening = false;
       this.onListening(false);

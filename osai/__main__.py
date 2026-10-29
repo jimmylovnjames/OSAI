@@ -17,8 +17,29 @@ import time
 import webbrowser
 
 
+def _wait_for_server(url: str, timeout: float = 120) -> None:
+    """Block until the local server answers. Slow machines can take far longer than a fixed delay."""
+    import urllib.request
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            urllib.request.urlopen(url + "api/status", timeout=2).close()
+            return
+        except Exception:
+            time.sleep(0.5)
+
+
+def _server_running(url: str) -> bool:
+    import urllib.request
+    try:
+        urllib.request.urlopen(url + "api/status", timeout=2).close()
+        return True
+    except Exception:
+        return False
+
+
 def _open_screen(url: str, kiosk: bool, mini: bool) -> None:
-    time.sleep(1.2)
+    _wait_for_server(url)
     chrome = os.environ.get("OSAI_CHROMIUM") or shutil.which("chromium") or shutil.which("chromium-browser") or shutil.which("google-chrome") \
         or shutil.which("microsoft-edge") or (r"C:\Program Files\Google\Chrome\Application\chrome.exe"
                                               if os.path.exists(r"C:\Program Files\Google\Chrome\Application\chrome.exe") else None) \
@@ -28,6 +49,7 @@ def _open_screen(url: str, kiosk: bool, mini: bool) -> None:
         base = [chrome, f"--user-data-dir={os.path.expanduser('~/.osai/shell-profile')}", "--no-first-run",
                 "--autoplay-policy=no-user-gesture-required", "--use-fake-ui-for-media-stream",
                 "--disable-infobars", "--no-default-browser-check", "--test-type", "--disable-features=Translate,MediaRouter"]
+        base += os.environ.get("OSAI_CHROMIUM_FLAGS", "").split()
         if hasattr(os, "geteuid") and os.geteuid() == 0:
             base.append("--no-sandbox")  # Chromium refuses to start as root otherwise
         log_path = os.path.join(os.environ.get("OSAI_HOME", os.path.expanduser("~/.osai")), "shell.log")
@@ -110,6 +132,12 @@ def main(argv: list[str] | None = None) -> None:
     from .server import create_app
 
     url = f"http://{'127.0.0.1' if args.host in ('0.0.0.0', '::') else args.host}:{args.port}/"
+    if _server_running(url):
+        # Already running (e.g. the desktop session restarted): just open the screens on it.
+        if not args.no_browser:
+            _open_screen(url, args.kiosk, args.mini)
+        print(f"OSAI already running at {url}")
+        return
     if not args.no_browser:
         threading.Thread(target=_open_screen, args=(url, args.kiosk, args.mini), daemon=True).start()
     print(f"OSAI running at {url}")

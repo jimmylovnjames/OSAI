@@ -15,7 +15,7 @@ SUITE=${SUITE:-noble}
 MIRROR=${MIRROR:-http://archive.ubuntu.com/ubuntu}
 FLAVOR=${FLAVOR:-full}
 CHROMIUM_DIR=${CHROMIUM_DIR:-}
-WHISPER_MODEL=${WHISPER_MODEL:-base.en}
+WHISPER_MODEL=${WHISPER_MODEL-base.en}  # set empty to skip
 ROOT=$WORK/chroot
 
 [ "$(id -u)" = 0 ] || { echo "run as root (sudo)"; exit 1; }
