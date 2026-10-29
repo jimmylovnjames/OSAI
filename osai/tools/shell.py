@@ -6,7 +6,7 @@ import subprocess
 
 import psutil
 
-from ..osinfo import HOME, IS_WINDOWS, which
+from ..osinfo import HOME, IS_WINDOWS, detach_kwargs, which
 from ..safety import shell_risk
 from .base import ToolError, tool
 
@@ -37,9 +37,8 @@ def run_command(ctx, command: str, cwd: str | None = None, timeout: int = 60, ba
         raise ToolError(f"cwd does not exist: {cwd}")
     argv = _shell_argv(command)
     if background:
-        kw = {"start_new_session": True} if not IS_WINDOWS else {}
         p = subprocess.Popen(argv, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL, **kw)
+                             stderr=subprocess.DEVNULL, **detach_kwargs())
         return f"started in background, pid {p.pid}"
     timeout = max(1, min(int(timeout), 600))
     try:

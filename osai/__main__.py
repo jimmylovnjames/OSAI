@@ -16,6 +16,8 @@ import threading
 import time
 import webbrowser
 
+from .osinfo import detach_kwargs
+
 
 def _status(url: str) -> dict | None:
     import json
@@ -77,7 +79,7 @@ def _open_screen(url: str, kiosk: bool, mini: bool) -> None:
                                    *common, f"--app={url}?mini=1", "--window-size=240,300"]
 
     def launch(argv):
-        return subprocess.Popen(argv, stdout=log, stderr=log, start_new_session=os.name != "nt")
+        return subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=log, stderr=log, **detach_kwargs())
 
     procs = {k: launch(v) for k, v in screens.items()}
     for attempt, patience in enumerate((90, 240, 600)):  # back off: very slow machines need minutes

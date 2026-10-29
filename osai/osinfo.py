@@ -7,6 +7,7 @@ import platform
 import shutil
 import socket
 import subprocess
+import sys
 from pathlib import Path
 
 SYSTEM = platform.system().lower()  # linux | darwin | windows
@@ -39,14 +40,24 @@ def run(cmd: list[str] | str, timeout: float = 20, shell: bool = False, input: s
         return 124, f"timed out after {timeout}s"
 
 
+def detach_kwargs() -> dict:
+    """Popen kwargs so a launched program outlives OSAI and ignores Ctrl-C sent to OSAI's terminal.
+
+    Deliberately a new process group, not a new session: Chromium (and so every Chromium/Electron app)
+    started with setsid() never loads its first page under the user-namespace sandbox (found on the
+    OSAI live image).
+    """
+    if IS_WINDOWS:
+        return {"creationflags": subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP}  # type: ignore[attr-defined]
+    if sys.version_info >= (3, 11):
+        return {"process_group": 0}
+    return {"preexec_fn": os.setpgrp}
+
+
 def spawn(cmd: list[str] | str, shell: bool = False, cwd: str | None = None) -> int:
     """Start a detached process (an app) and return its pid."""
-    kwargs: dict = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL, "cwd": cwd}
-    if IS_WINDOWS:
-        kwargs["creationflags"] = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
-    else:
-        kwargs["start_new_session"] = True
-    return subprocess.Popen(cmd, shell=shell, **kwargs).pid
+    return subprocess.Popen(cmd, shell=shell, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL, cwd=cwd, **detach_kwargs()).pid
 
 
 def powershell(script: str, timeout: float = 20) -> tuple[int, str]:
