@@ -63,7 +63,8 @@ def _open_screen(url: str, kiosk: bool, mini: bool) -> None:
     log = open(os.path.join(home, "shell.log"), "ab")
     common = ["--no-first-run", "--autoplay-policy=no-user-gesture-required", "--use-fake-ui-for-media-stream",
               "--disable-infobars", "--no-default-browser-check", "--test-type",
-              "--disable-features=Translate,MediaRouter",
+              # Chromium honours only the last --disable-features flag, so keep them all in this one.
+              "--disable-features=Translate,MediaRouter,Vulkan",
               # Never ask a desktop keyring over D-Bus: with a session bus but no keyring service (minimal
               # sessions, the OSAI image) Chromium blocks on those calls and the page never loads.
               "--password-store=basic"] + os.environ.get("OSAI_CHROMIUM_FLAGS", "").split()
@@ -79,8 +80,8 @@ def _open_screen(url: str, kiosk: bool, mini: bool) -> None:
         return subprocess.Popen(argv, stdout=log, stderr=log, start_new_session=os.name != "nt")
 
     procs = {k: launch(v) for k, v in screens.items()}
-    for attempt in range(3):
-        deadline = time.time() + 90
+    for attempt, patience in enumerate((90, 240, 600)):  # back off: very slow machines need minutes
+        deadline = time.time() + patience
         while time.time() < deadline:
             st = _status(url) or {}
             if all(st.get(k, 0) > 0 for k in screens):
