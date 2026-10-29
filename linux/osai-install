@@ -1,0 +1,238 @@
+#!/usr/bin/env bash
+# Install OSAI from the running live system onto a disk. ERASES THE WHOLE TARGET DISK.
+#
+# Run as root. The password is read from stdin (one line) so it never appears in the process list.
+#   echo 'secret' | sudo osai-install --disk /dev/sda --user ana --fullname "Ana Silva" --hostname ana-pc \
+#       --timezone Europe/Lisbon [--autologin] [--passwordless-admin] [--copy-settings /home/osai/.osai] [--dry-run]
+#
+# Output is line-oriented for the OSAI installer screen:
+#   PROGRESS <0-100> <message>      ERROR <message>      DONE
+#
+# Layout (GPT, boots on BIOS and UEFI): 1 MiB BIOS-boot · 512 MiB EFI (FAT32) · rest ext4 root.
+# --source DIR copies from a directory instead of the live system (used for testing).
+set -Eeuo pipefail
+
+DISK="" USERNAME="" FULLNAME="" HOSTNAME_="osai" TZ_="UTC" AUTOLOGIN=0 NOPASSWD=0 SETTINGS="" DRY=0 SOURCE=""
+MIN_BYTES=$((12 * 1024 * 1024 * 1024))
+TARGET=/mnt/osai-target
+SQUASH_MNT=/mnt/osai-source
+
+progress() { printf 'PROGRESS %s %s\n' "$1" "$2"; }
+fail() { printf 'ERROR %s\n' "$*"; exit 1; }
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --disk) DISK=$2; shift ;;
+    --user) USERNAME=$2; shift ;;
+    --fullname) FULLNAME=$2; shift ;;
+    --hostname) HOSTNAME_=$2; shift ;;
+    --timezone) TZ_=$2; shift ;;
+    --autologin) AUTOLOGIN=1 ;;
+    --passwordless-admin) NOPASSWD=1 ;;
+    --copy-settings) SETTINGS=$2; shift ;;
+    --source) SOURCE=$2; shift ;;
+    --dry-run) DRY=1 ;;
+    *) fail "unknown option $1" ;;
+  esac
+  shift
+done
+
+IFS= read -r PASSWORD || true
+
+# ---------------------------------------------------------------- validation
+[ "$(id -u)" = 0 ] || fail "must run as root"
+[ -b "$DISK" ] || fail "$DISK is not a block device"
+case "$(lsblk -dno TYPE "$DISK")" in disk|loop) ;; *) fail "$DISK is not a whole disk" ;; esac
+[[ "$USERNAME" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || fail "username must be lowercase letters, digits, - or _"
+case "$USERNAME" in root|osai|daemon|bin|sys|nobody) fail "username '$USERNAME' is reserved" ;; esac
+[ "${#PASSWORD}" -ge 4 ] || fail "password must be at least 4 characters"
+[[ "$HOSTNAME_" =~ ^[a-zA-Z0-9][a-zA-Z0-9-]{0,62}$ ]] || fail "computer name may only use letters, digits and -"
+[ -f "/usr/share/zoneinfo/$TZ_" ] || fail "unknown time zone $TZ_"
+SIZE=$(lsblk -bdno SIZE "$DISK")
+[ "$SIZE" -ge "$MIN_BYTES" ] || fail "$DISK is too small ($((SIZE / 1024 / 1024 / 1024)) GB); OSAI needs at least 12 GB"
+
+# Never install over the medium we booted from.
+for m in /cdrom /run/live/medium /isodevice; do
+  src=$(findmnt -no SOURCE "$m" 2>/dev/null || true)
+  if [ -n "$src" ]; then
+    parent=$(lsblk -no PKNAME "$src" 2>/dev/null | head -1 || true)
+    [ "$src" = "$DISK" ] || [ "/dev/${parent}" = "$DISK" ] && fail "$DISK holds the OSAI live system you booted from"
+  fi
+done
+
+if [ -z "$SOURCE" ]; then
+  if [ -d /rofs/usr ]; then
+    SOURCE=/rofs
+  else
+    sq=$(ls /cdrom/casper/filesystem.squashfs /run/live/medium/casper/filesystem.squashfs 2>/dev/null | head -1 || true)
+    [ -n "$sq" ] || fail "cannot find the OSAI system image (are you running the live USB?)"
+    SOURCE=SQUASH:$sq
+  fi
+fi
+
+part() {  # partition N of the disk: sda -> sda3, nvme0n1 -> nvme0n1p3, loop0 -> loop0p3
+  case "$DISK" in *[0-9]) echo "${DISK}p$1" ;; *) echo "${DISK}$1" ;; esac
+}
+
+if [ "$DRY" = 1 ]; then
+  progress 5 "Would erase $DISK ($((SIZE / 1024 / 1024 / 1024)) GB) and create BIOS-boot, EFI and root partitions"
+  progress 50 "Would copy the system from ${SOURCE#SQUASH:}"
+  progress 90 "Would create user $USERNAME on $HOSTNAME_ ($TZ_), install the boot loader"
+  echo DONE
+  exit 0
+fi
+
+# ---------------------------------------------------------------- cleanup on any exit
+cleanup() {
+  set +e
+  for m in run dev/pts dev sys proc boot/efi; do mountpoint -q "$TARGET/$m" && umount -lf "$TARGET/$m"; done
+  mountpoint -q "$TARGET" && umount -lf "$TARGET"
+  mountpoint -q "$SQUASH_MNT" && umount -lf "$SQUASH_MNT"
+}
+trap 'printf "ERROR step failed at line %s: %s\n" "$LINENO" "$BASH_COMMAND"' ERR
+trap cleanup EXIT
+
+# ---------------------------------------------------------------- 1. partition
+progress 2 "Preparing $DISK"
+for p in $(lsblk -lnpo NAME "$DISK" | tail -n +2); do
+  umount -f "$p" 2>/dev/null || true
+  swapoff "$p" 2>/dev/null || true
+done
+wipefs -aq "$DISK"
+sgdisk --zap-all "$DISK" >/dev/null
+sgdisk -n1:0:+1M -t1:ef02 -c1:bios-boot \
+       -n2:0:+512M -t2:ef00 -c2:EFI \
+       -n3:0:0 -t3:8304 -c3:OSAI "$DISK" >/dev/null
+partprobe "$DISK" 2>/dev/null || blockdev --rereadpt "$DISK" 2>/dev/null || true
+udevadm settle 2>/dev/null || true
+for i in $(seq 1 20); do [ -b "$(part 3)" ] && break; sleep 0.5; done
+[ -b "$(part 3)" ] || fail "the new partitions did not appear"
+EFI_PART=$(part 2) ROOT_PART=$(part 3)
+
+progress 6 "Formatting"
+mkfs.vfat -F 32 -n EFI "$EFI_PART" >/dev/null
+mkfs.ext4 -qF -L OSAI "$ROOT_PART"
+
+mkdir -p "$TARGET"
+mount "$ROOT_PART" "$TARGET"
+mkdir -p "$TARGET/boot/efi"
+mount "$EFI_PART" "$TARGET/boot/efi"
+
+# ---------------------------------------------------------------- 2. copy the system
+if [[ "$SOURCE" == SQUASH:* ]]; then
+  mkdir -p "$SQUASH_MNT"
+  mount -o ro,loop "${SOURCE#SQUASH:}" "$SQUASH_MNT"
+  SOURCE=$SQUASH_MNT
+fi
+progress 8 "Copying OSAI to the disk"
+# rsync's overall percentage maps onto 8..80 of the install.
+rsync -aHAX --numeric-ids --info=progress2 --no-inc-recursive \
+  --exclude='/proc/*' --exclude='/sys/*' --exclude='/dev/*' --exclude='/run/*' --exclude='/tmp/*' \
+  --exclude='/mnt/*' --exclude='/media/*' --exclude='/lost+found' --exclude='/.debootstrap-done' \
+  --exclude='/boot/efi/*' "$SOURCE/" "$TARGET/" \
+  | stdbuf -oL tr '\r' '\n' | while read -r line; do
+      pct=$(sed -n 's/.* \([0-9]\{1,3\}\)% .*/\1/p' <<<"$line")
+      [ -n "$pct" ] && [ "$pct" != "${last:-}" ] && last=$pct && progress $((8 + pct * 72 / 100)) "Copying OSAI to the disk"
+    done
+[ -x "$TARGET/usr/bin/env" ] || fail "copying the system failed"
+
+# A kernel must be present for the boot loader (older images left /boot out of the system image).
+if ! ls "$TARGET"/boot/vmlinuz-* >/dev/null 2>&1; then
+  KVER=$(ls "$TARGET/lib/modules" | sort -V | tail -1)
+  for v in /cdrom/casper/vmlinuz /run/live/medium/casper/vmlinuz; do
+    [ -f "$v" ] && cp "$v" "$TARGET/boot/vmlinuz-$KVER" && break
+  done
+  ls "$TARGET"/boot/vmlinuz-* >/dev/null 2>&1 || fail "no kernel found to install"
+fi
+
+# ---------------------------------------------------------------- 3. configure the installed system
+progress 82 "Setting up your account"
+for m in proc sys dev dev/pts run; do mkdir -p "$TARGET/$m"; done
+mount -t proc proc "$TARGET/proc"
+mount -t sysfs sys "$TARGET/sys"
+mount --bind /dev "$TARGET/dev"
+mount --bind /dev/pts "$TARGET/dev/pts"
+mount -t tmpfs tmpfs "$TARGET/run"
+
+ROOT_UUID=$(blkid -s UUID -o value "$ROOT_PART")
+EFI_UUID=$(blkid -s UUID -o value "$EFI_PART")
+cat > "$TARGET/etc/fstab" <<EOF
+# OSAI
+UUID=$ROOT_UUID  /          ext4  errors=remount-ro  0 1
+UUID=$EFI_UUID   /boot/efi  vfat  umask=0077         0 1
+EOF
+
+echo "$HOSTNAME_" > "$TARGET/etc/hostname"
+cat > "$TARGET/etc/hosts" <<EOF
+127.0.0.1 localhost
+127.0.1.1 $HOSTNAME_
+::1 localhost ip6-localhost ip6-loopback
+EOF
+ln -sf "/usr/share/zoneinfo/$TZ_" "$TARGET/etc/localtime"
+echo "$TZ_" > "$TARGET/etc/timezone"
+rm -f "$TARGET/etc/casper.conf"
+: > "$TARGET/etc/machine-id"
+
+in_target() { chroot "$TARGET" /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LANG=C.UTF-8 DEBIAN_FRONTEND=noninteractive "$@"; }
+
+in_target systemd-machine-id-setup >/dev/null 2>&1 || true
+# The live-boot machinery must not run on an installed system.
+in_target dpkg --purge casper >/dev/null 2>&1 || true
+
+GROUPS_=$(for g in sudo adm audio video plugdev netdev lpadmin bluetooth input render; do getent group "$g" >/dev/null && \
+  chroot "$TARGET" getent group "$g" >/dev/null && printf '%s,' "$g"; done; true)
+in_target useradd -m -s /bin/bash -c "$FULLNAME" -G "${GROUPS_%,}" "$USERNAME"
+printf '%s:%s\n' "$USERNAME" "$PASSWORD" | in_target chpasswd
+
+if [ "$AUTOLOGIN" = 1 ]; then
+  mkdir -p "$TARGET/etc/systemd/system/getty@tty1.service.d"
+  cat > "$TARGET/etc/systemd/system/getty@tty1.service.d/autologin.conf" <<EOF
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin $USERNAME --noclear %I \$TERM
+EOF
+else
+  rm -f "$TARGET/etc/systemd/system/getty@tty1.service.d/autologin.conf"
+fi
+
+if [ "$NOPASSWD" = 1 ]; then
+  echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" > "$TARGET/etc/sudoers.d/90-osai-$USERNAME"
+  chmod 440 "$TARGET/etc/sudoers.d/90-osai-$USERNAME"
+fi
+
+if [ -n "$SETTINGS" ] && [ -d "$SETTINGS" ]; then
+  progress 85 "Bringing over your OSAI settings"
+  mkdir -p "$TARGET/home/$USERNAME/.osai"
+  # Settings, memory and schedule; not the browser profiles (large, and tied to the live session).
+  find "$SETTINGS" -maxdepth 1 -type f -name '*.json' -exec cp {} "$TARGET/home/$USERNAME/.osai/" \;
+  in_target chown -R "$USERNAME:$USERNAME" "/home/$USERNAME/.osai"
+  chmod 700 "$TARGET/home/$USERNAME/.osai"
+fi
+
+# ---------------------------------------------------------------- 4. boot loader
+progress 88 "Preparing the system to start"
+in_target update-initramfs -c -k all >/dev/null 2>&1 || in_target update-initramfs -u -k all >/dev/null
+
+progress 93 "Installing the boot loader"
+cat > "$TARGET/etc/default/grub" <<'EOF'
+GRUB_DEFAULT=0
+GRUB_TIMEOUT_STYLE=hidden
+GRUB_TIMEOUT=2
+GRUB_DISTRIBUTOR=OSAI
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"
+GRUB_CMDLINE_LINUX=""
+GRUB_DISABLE_OS_PROBER=true
+EOF
+# Both boot styles, so the disk starts whatever the firmware is set to.
+in_target grub-install --target=i386-pc --recheck "$DISK" >/dev/null 2>&1 || fail "installing the BIOS boot loader failed"
+in_target grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=OSAI --removable --no-nvram \
+  >/dev/null 2>&1 || fail "installing the UEFI boot loader failed"
+if [ -d /sys/firmware/efi/efivars ]; then
+  # Booted in UEFI mode: also register a named boot entry (the removable path above still works without it).
+  in_target grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=OSAI >/dev/null 2>&1 || true
+fi
+in_target grub-mkconfig -o /boot/grub/grub.cfg >/dev/null 2>&1 || fail "writing the boot menu failed"
+
+progress 98 "Finishing"
+sync
+echo DONE

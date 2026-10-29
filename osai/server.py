@@ -16,7 +16,7 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import miniwatch, voice
+from . import installer as installer_mod, miniwatch, voice
 from .agent import Agent
 from .config import Config
 from .memory import Memory
@@ -78,6 +78,7 @@ def create_app(config: Config | None = None, client_factory=None) -> FastAPI:
         await hub.emit({"type": "schedule", "items": scheduler.items})
 
     scheduler = Scheduler(on_fire)
+    installer = installer_mod.Installer(hub.emit)
     services["scheduler"] = scheduler
 
     @asynccontextmanager
@@ -148,8 +149,41 @@ def create_app(config: Config | None = None, client_factory=None) -> FastAPI:
 
     @app.get("/api/status")
     async def status():
-        return status_snapshot() | {"busy": agent.busy, "schedule": scheduler.items,
+        return status_snapshot() | {"busy": agent.busy, "schedule": scheduler.items, "live": installer_mod.is_live(),
                                     "screens": len(hub.clients) - len(hub.mini), "mini_screens": len(hub.mini)}
+
+    @app.get("/install")
+    async def install_page():
+        return FileResponse(WEB / "install.html", headers={"Cache-Control": "no-cache"})
+
+    @app.get("/api/install")
+    async def install_info(request: Request):
+        check(request.headers.get("x-osai-token"))
+        data = await asyncio.to_thread(installer_mod.info)
+        tzs = sorted(str(p.relative_to("/usr/share/zoneinfo")) for p in Path("/usr/share/zoneinfo").glob("*/*")
+                     if p.is_file() and p.parts[4][0].isupper()) if Path("/usr/share/zoneinfo").is_dir() else []
+        return data | {"progress": installer.last, "timezones": tzs,
+                       "home": str(Path(os.environ.get("OSAI_HOME", Path.home() / ".osai")))}
+
+    @app.post("/api/install")
+    async def install_start(request: Request):
+        check(request.headers.get("x-osai-token"))
+        req = await request.json()
+        if not isinstance(req, dict):
+            raise HTTPException(400, "expected an object")
+        problem = await installer.start(req, dry_run=bool(req.get("dry_run")))
+        if problem:
+            raise HTTPException(400, problem)
+        return {"ok": True}
+
+    @app.post("/api/install/reboot")
+    async def install_reboot(request: Request):
+        check(request.headers.get("x-osai-token"))
+        if installer.last.get("state") != "done":
+            raise HTTPException(400, "nothing was installed")
+        argv = ["systemctl", "reboot"] if os.geteuid() == 0 else ["sudo", "-n", "systemctl", "reboot"]
+        await asyncio.create_subprocess_exec(*argv)
+        return {"ok": True}
 
     @app.post("/api/listen")
     async def listen(request: Request):

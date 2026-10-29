@@ -12,6 +12,7 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--fg);
   font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, "Helvetica Neue", sans-serif; }
 button, input, select { font: inherit; color: inherit; }
@@ -119,6 +120,7 @@ body[data-wallpaper="matrix"] #matrix { display: block; }
 .chip { border: 1px solid var(--glass-border); background: #ffffff10; border-radius: 999px; padding: 6px 12px; cursor: pointer; font-size: 13px; white-space: nowrap; }
 .chip.active { background: var(--accent); border-color: transparent; }
 .chip.stop { background: var(--bad); border-color: transparent; }
+.chip.install { background: var(--accent); border-color: transparent; color: #fff; text-decoration: none; font-weight: 600; }
 #hint { color: #fff8; font-size: 12.5px; text-align: center; }
 #toast { min-height: 0; }
 .toast { padding: 10px 16px; border-radius: 14px; animation: rise .25s; margin-bottom: 4px; font-size: 14px; }

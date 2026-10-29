@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Install OSAI</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='44' fill='%237c5cff'/%3E%3Ccircle cx='36' cy='45' r='8' fill='white'/%3E%3Ccircle cx='64' cy='45' r='8' fill='white'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/styles.css">
+<link rel="stylesheet" href="/static/install.css">
+</head>
+<body data-wallpaper="aurora">
+<div id="wallpaper" aria-hidden="true"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div></div>
+
+<main id="wizard" class="glass">
+  <aside class="guide">
+    <div id="guide-avatar"></div>
+    <p id="guide-text">Let's put OSAI on this computer for good.</p>
+    <ol class="steps" id="steps">
+      <li data-step="welcome">Welcome</li>
+      <li data-step="disk">Disk</li>
+      <li data-step="you">You</li>
+      <li data-step="options">Options</li>
+      <li data-step="confirm">Confirm</li>
+      <li data-step="progress">Install</li>
+    </ol>
+  </aside>
+
+  <section class="pane">
+    <!-- Welcome -->
+    <div class="step" data-step="welcome">
+      <h1>Install OSAI</h1>
+      <p class="lead">You're running OSAI from a USB stick, so nothing you do is kept. Installing copies it onto this computer's disk so it starts on its own, keeps your files, and remembers your settings.</p>
+      <ul class="facts">
+        <li><strong>Erases the disk you choose.</strong> Everything on it is replaced by OSAI.</li>
+        <li><strong>Takes 10–20 minutes</strong> on most computers.</li>
+        <li><strong>Works with</strong> <span id="fw"></span> start-up; the disk also boots on the other kind.</li>
+      </ul>
+      <p id="not-live" class="warn" hidden>OSAI is already installed here — this screen only works from the OSAI USB.</p>
+      <div class="actions"><a class="btn ghost" href="/">Not now</a><button class="btn primary" data-next>Let's go</button></div>
+    </div>
+
+    <!-- Disk -->
+    <div class="step" data-step="disk" hidden>
+      <h1>Where should OSAI go?</h1>
+      <p class="lead">Pick the disk to install on. <strong>Everything on it will be erased.</strong></p>
+      <div id="disks" class="disks" role="radiogroup" aria-label="Disks"></div>
+      <p id="no-disks" class="warn" hidden>No disk of 12 GB or more was found.</p>
+      <div class="actions"><button class="btn ghost" data-back>Back</button><button class="btn primary" data-next id="disk-next" disabled>Next</button></div>
+    </div>
+
+    <!-- You -->
+    <div class="step" data-step="you" hidden>
+      <h1>Who's this computer for?</h1>
+      <form id="you-form" class="grid" autocomplete="off">
+        <label>Your name <input id="fullname" placeholder="Ana Silva" maxlength="80"></label>
+        <label>Username <input id="username" placeholder="ana" maxlength="32" pattern="[a-z_][a-z0-9_-]*"></label>
+        <label>Computer name <input id="hostname" placeholder="ana-osai" maxlength="63"></label>
+        <label>Time zone <select id="timezone"></select></label>
+        <label>Password <input id="password" type="password" minlength="4"></label>
+        <label>Password again <input id="password2" type="password" minlength="4"></label>
+      </form>
+      <p id="you-error" class="warn" hidden></p>
+      <div class="actions"><button class="btn ghost" data-back>Back</button><button class="btn primary" data-next id="you-next">Next</button></div>
+    </div>
+
+    <!-- Options -->
+    <div class="step" data-step="options" hidden>
+      <h1>A few choices</h1>
+      <label class="option"><input type="checkbox" id="autologin" checked>
+        <span><strong>Start without asking for my password</strong><br>OSAI opens straight away when the computer turns on. Turn off if others can reach this computer.</span></label>
+      <label class="option"><input type="checkbox" id="copy_settings" checked>
+        <span><strong>Keep my OSAI settings</strong><br>Your avatar, voice, memory, schedule and API key come with you.</span></label>
+      <label class="option"><input type="checkbox" id="passwordless_admin">
+        <span><strong>Let OSAI do admin tasks without my password</strong><br>Needed for OSAI to install apps or change system settings by itself. Less safe: OSAI's own approval prompts are the only check.</span></label>
+      <div class="actions"><button class="btn ghost" data-back>Back</button><button class="btn primary" data-next>Next</button></div>
+    </div>
+
+    <!-- Confirm -->
+    <div class="step" data-step="confirm" hidden>
+      <h1>Ready to install</h1>
+      <table class="summary" id="summary"></table>
+      <label class="confirm">To erase <strong id="confirm-disk"></strong> and install OSAI, type <code id="confirm-name"></code>:
+        <input id="confirm" autocomplete="off" spellcheck="false"></label>
+      <p id="confirm-error" class="warn" hidden></p>
+      <div class="actions"><button class="btn ghost" data-back>Back</button><button class="btn danger" id="go" disabled>Erase and install</button></div>
+    </div>
+
+    <!-- Progress -->
+    <div class="step" data-step="progress" hidden>
+      <h1 id="progress-title">Installing OSAI…</h1>
+      <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div id="bar-fill"></div></div>
+      <p class="lead"><span id="progress-msg">Starting</span> · <span id="progress-pct">0</span>%</p>
+      <p id="progress-note" class="muted">Keep the USB plugged in until it's done.</p>
+      <p id="progress-error" class="warn" hidden></p>
+      <div class="actions" id="done-actions" hidden>
+        <a class="btn ghost" href="/">Back to OSAI</a><button class="btn primary" id="reboot">Restart now</button>
+      </div>
+      <div class="actions" id="fail-actions" hidden>
+        <a class="btn ghost" href="/">Back to OSAI</a><button class="btn primary" id="retry">Try again</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script type="module" src="/static/install.js"></script>
+</body>
+</html>

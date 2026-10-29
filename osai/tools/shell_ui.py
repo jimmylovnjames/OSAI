@@ -189,3 +189,17 @@ def osai_settings(ctx, autonomy: str | None = None, effort: str | None = None, v
     ctx.config.update(patch)
     ctx.notify({"type": "config", "config": ctx.config.public()})
     return "settings updated"
+
+
+@tool(
+    "open_installer",
+    "Open the screen that installs OSAI permanently onto this computer's disk (only from the live USB). "
+    "The user picks the disk and confirms on that screen; you never erase a disk yourself.",
+    category="osai",
+)
+def open_installer(ctx):
+    from ..installer import is_live
+    if not is_live():
+        raise ToolError("OSAI is already installed (not running from the live USB)")
+    ctx.notify({"type": "open_installer"})
+    return "installer opened on screen"

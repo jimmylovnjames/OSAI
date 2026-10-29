@@ -230,6 +230,7 @@ function handle(ev) {
     case "notice": toast(ev.text); break;
     case "speak": voice.replyDone = true; voice.say(ev.text); break;
     case "listen": if (!voice.listening) voice.listenOnce(); break;
+    case "open_installer": if (!MINI) location.href = "/install" + location.search; break;
     case "error":
       feedItem("err", esc(ev.text));
       if (!ev.replay) {
@@ -319,6 +320,7 @@ async function pollStatus() {
     $("#ind-cpu").textContent = `CPU ${Math.round(s.cpu)}%`;
     $("#ind-net").textContent = s.online ? "● Online" : "○ Offline";
     $("#ind-bat").textContent = s.battery ? `${s.battery.plugged ? "⚡" : "▮"} ${s.battery.percent}%` : "";
+    $("#btn-install").hidden = !s.live || MINI;
   } catch {}
 }
 function tickClock() {

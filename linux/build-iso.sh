@@ -85,7 +85,8 @@ apt-get install -y -q --no-install-recommends \
   fonts-noto-core fonts-noto-color-emoji fonts-dejavu-core \
   network-manager wpasupplicant iw bluez pipewire pipewire-pulse wireplumber pulseaudio-utils alsa-utils \
   playerctl brightnessctl espeak-ng poppler-utils pcmanfm mpv flatpak \
-  python3 python3-venv python3-pip python3-tk
+  python3 python3-venv python3-pip python3-tk \
+  rsync gdisk parted dosfstools e2fsprogs grub2-common grub-pc-bin grub-efi-amd64-bin efibootmgr
 locale-gen en_US.UTF-8 >/dev/null || true
 
 # Chromium's sandbox needs unprivileged user namespaces, which Ubuntu 24.04 restricts by default.
@@ -154,9 +155,10 @@ rm -rf "$ISO"; mkdir -p "$ISO/casper" "$ISO/boot/grub" "$ISO/.disk"
 cp -L "$ROOT/boot/vmlinuz" "$ISO/casper/vmlinuz"
 cp -L "$ROOT/boot/initrd.img" "$ISO/casper/initrd"
 echo "OSAI $(date +%Y-%m-%d) (Ubuntu $SUITE base)" > "$ISO/.disk/info"
-# -e must be the last option: everything after it is an exclude pattern.
+# -e must be the last option: everything after it is an exclude pattern. /boot stays in: the installer
+# copies this filesystem to disk and needs the kernel.
 mksquashfs "$ROOT" "$ISO/casper/filesystem.squashfs" -noappend -comp zstd -wildcards \
-  -e boot .debootstrap-done 'proc/*' 'sys/*' 'dev/*' 'run/*' 'tmp/*'
+  -e .debootstrap-done 'proc/*' 'sys/*' 'dev/*' 'run/*' 'tmp/*'
 du -sx --block-size=1 "$ROOT" | cut -f1 > "$ISO/casper/filesystem.size"
 cat > "$ISO/boot/grub/grub.cfg" <<'EOF'
 set timeout=3
