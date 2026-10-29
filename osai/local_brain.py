@@ -187,8 +187,9 @@ class _Stream:
                 raise LocalBrainError(f"local AI error: {chunk['error']}")
             for choice in chunk.get("choices", []):
                 delta = choice.get("delta") or {}
-                if delta.get("reasoning_content"):
-                    yield SimpleNamespace(type="thinking", thinking=delta["reasoning_content"])
+                reasoning = delta.get("reasoning_content") or delta.get("reasoning")  # llama.cpp / Ollama
+                if reasoning:
+                    yield SimpleNamespace(type="thinking", thinking=reasoning)
                 if delta.get("content"):
                     self.text += delta["content"]
                     yield SimpleNamespace(type="text", text=delta["content"])
