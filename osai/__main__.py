@@ -26,13 +26,19 @@ def _open_screen(url: str, kiosk: bool, mini: bool) -> None:
             if os.path.exists("/Applications/Google Chrome.app") else None)
     if chrome:
         base = [chrome, f"--user-data-dir={os.path.expanduser('~/.osai/shell-profile')}", "--no-first-run",
-                "--autoplay-policy=no-user-gesture-required", "--use-fake-ui-for-media-stream"]
+                "--autoplay-policy=no-user-gesture-required", "--use-fake-ui-for-media-stream",
+                "--disable-infobars", "--no-default-browser-check", "--test-type", "--disable-features=Translate,MediaRouter"]
+        if hasattr(os, "geteuid") and os.geteuid() == 0:
+            base.append("--no-sandbox")  # Chromium refuses to start as root otherwise
+        log_path = os.path.join(os.environ.get("OSAI_HOME", os.path.expanduser("~/.osai")), "shell.log")
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+        log = open(log_path, "ab")
         subprocess.Popen(base + ["--class=OSAIShell"] + (["--kiosk", url] if kiosk else [f"--app={url}", "--start-maximized"]),
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=os.name != "nt")
+                         stdout=log, stderr=log, start_new_session=os.name != "nt")
         if mini:
             subprocess.Popen(base[:1] + base[2:] + [f"--user-data-dir={os.path.expanduser('~/.osai/mini-profile')}", "--class=OSAIMini",
                                                     f"--app={url}?mini=1", "--window-size=240,300"],
-                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=os.name != "nt")
+                             stdout=log, stderr=log, start_new_session=os.name != "nt")
     else:
         webbrowser.open(url)
 

@@ -142,15 +142,19 @@ body[data-wallpaper="matrix"] #matrix { display: block; }
 .seg button.active { background: var(--accent); border-color: transparent; }
 #avatar-preview { width: 150px; height: 150px; margin: 0 auto 8px; }
 
-/* ---------- mini overlay mode ---------- */
-body.mini { background: transparent; }
+/* ---------- mini overlay mode (small always-on-top window) ---------- */
+body.mini { background: var(--bg); }
 body.mini #wallpaper, body.mini #topbar, body.mini #cards, body.mini #feed, body.mini #hint, body.mini #input,
-body.mini #btn-send, body.mini #btn-hands, body.mini #caption-user { display: none; }
-body.mini #stage { inset: 0 0 64px 0; }
-body.mini #avatar { width: 200px; }
-body.mini #caption-ai { font-size: 13px; -webkit-line-clamp: 3; }
-body.mini #ask { width: auto; background: none; border: 0; box-shadow: none; backdrop-filter: none; }
-body.mini #approvals { bottom: 70px; }
+body.mini #btn-send, body.mini #btn-hands, body.mini #caption-user, body.mini #toast, body.mini #settings { display: none !important; }
+body.mini #stage { inset: 0 0 64px 0; justify-content: flex-start; padding-top: 4px; }
+body.mini #avatar { width: min(170px, 70vw); flex: none; }
+body.mini #caption { min-height: 0; margin-top: 0; padding: 0 10px; }
+body.mini #caption-ai { font-size: 12.5px; -webkit-line-clamp: 3; text-shadow: none; }
+body.mini #dock { padding-bottom: 8px; }
+body.mini #ask { width: auto; background: none; border: 0; box-shadow: none; backdrop-filter: none; padding: 0; }
+body.mini #approvals { bottom: 64px; width: calc(100vw - 16px); }
+body.mini .approval { padding: 10px; font-size: 12px; }
+body.mini .approval code { max-height: 50px; }
 
 @media (max-width: 900px) {
   #feed { width: min(330px, calc(100vw - 36px)); }

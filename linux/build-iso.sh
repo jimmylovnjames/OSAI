@@ -43,7 +43,9 @@ mount -t sysfs sys "$ROOT/sys"
 mount --bind /dev "$ROOT/dev"
 mount --bind /dev/pts "$ROOT/dev/pts"
 mount -t tmpfs tmpfs "$ROOT/run"
-cp -L /etc/resolv.conf "$ROOT/etc/resolv.conf" 2>/dev/null || true
+# Ubuntu's resolv.conf is a symlink into /run (now an empty tmpfs): replace it with a real file for the build.
+rm -f "$ROOT/etc/resolv.conf"
+cp -L /etc/resolv.conf "$ROOT/etc/resolv.conf"
 # Make the build host's CA bundle / pip config visible inside (needed behind TLS-inspecting proxies).
 for v in SSL_CERT_FILE REQUESTS_CA_BUNDLE PIP_CERT CURL_CA_BUNDLE PIP_CONFIG_FILE; do
   f=${!v:-}
@@ -136,6 +138,7 @@ systemctl enable NetworkManager >/dev/null 2>&1 || true
 
 update-initramfs -u
 apt-get clean
+rm -f /etc/resolv.conf  # NetworkManager writes the real one at boot
 rm -rf /var/lib/apt/lists/* /tmp/* /root/.cache
 CHROOT
 

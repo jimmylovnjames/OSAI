@@ -9,7 +9,7 @@ import os
 import tempfile
 import time
 
-from ..osinfo import IS_LINUX, IS_MAC, IS_WINDOWS, run, which
+from ..osinfo import IS_LINUX, IS_MAC, run, which
 from .base import ToolError, tool
 from .files import image_block
 
@@ -20,7 +20,7 @@ def _grab_png() -> bytes:
     try:
         import mss  # type: ignore
         import mss.tools  # type: ignore
-        with mss.mss() as s:
+        with (mss.MSS() if hasattr(mss, "MSS") else mss.mss()) as s:
             shot = s.grab(s.monitors[0])
             return mss.tools.to_png(shot.rgb, shot.size)
     except Exception:
@@ -43,11 +43,6 @@ def _grab_png() -> bytes:
                 os.unlink(path)
                 return data
     raise ToolError("cannot capture the screen (install mss, or grim/scrot)")
-
-
-def _screen_size() -> tuple[int, int]:
-    from PIL import Image
-    return Image.open(io.BytesIO(_grab_png())).size
 
 
 _scale = {"factor": 1.0}

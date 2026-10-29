@@ -16,7 +16,7 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import voice
+from . import miniwatch, voice
 from .agent import Agent
 from .config import Config
 from .memory import Memory
@@ -83,7 +83,9 @@ def create_app(config: Config | None = None, client_factory=None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app):
         scheduler.start()
+        watcher = asyncio.create_task(miniwatch.watch())
         yield
+        watcher.cancel()
         b = services.get("browser")
         if b:
             await b.close()
