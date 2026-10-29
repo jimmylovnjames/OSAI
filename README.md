@@ -22,6 +22,8 @@ headphones". It operates the whole computer for you: apps, files, windows, setti
             trash/open)  packages)      power, media)  keyboard)                 web_fetch)    timers)
 ```
 
+![OSAI live ISO booted in a VM](docs/osai-live-boot.png)
+
 ## Run it
 
 | Where | How |
@@ -102,10 +104,11 @@ OSAI automatically renders without the GPU.
 
 ## Status / known gaps
 
-- Verified here: unit/integration tests; the real Anthropic SDK request/stream/tool round-trip against a local
-  mock of the Messages API; every desktop tool against a real X server; the full Openbox session layout; the
-  ISO building and booting in QEMU to autologin + X + the OSAI server. Not verified here: a live Claude call
-  (no API key in the build environment), real audio hardware, real GPUs, macOS and Windows.
+- Verified here: unit/integration tests (CI on Linux, macOS, Windows); the real Anthropic SDK request,
+  stream and tool round-trip against a local mock of the Messages API; every desktop tool against a real X
+  server; the Openbox session layout; and the ISO building and booting hands-off in QEMU to the OSAI screen
+  (screenshot below). Not verified here: a live Claude call (no API key in the build environment), real audio
+  hardware, real GPUs, and the macOS/Windows tool paths beyond CI imports and tests.
 - The live ISO doesn't persist changes unless you boot the "keep my changes" entry with a `writable` partition;
   there's no graphical install-to-disk yet.
 - Wayland: window listing/focus and synthetic input use X11 tools; the OSAI session runs on X11. Under a

@@ -69,7 +69,10 @@ def _open_screen(url: str, kiosk: bool, mini: bool) -> None:
               "--disable-features=Translate,MediaRouter,Vulkan",
               # Never ask a desktop keyring over D-Bus: with a session bus but no keyring service (minimal
               # sessions, the OSAI image) Chromium blocks on those calls and the page never loads.
-              "--password-store=basic"] + os.environ.get("OSAI_CHROMIUM_FLAGS", "").split()
+              "--password-store=basic",
+              # Run Chromium's network service inside the browser process: on slow machines it was seen
+              # crashing during startup, which loses the first navigation and leaves a blank screen.
+              "--enable-features=NetworkServiceInProcess2"] + os.environ.get("OSAI_CHROMIUM_FLAGS", "").split()
     if hasattr(os, "geteuid") and os.geteuid() == 0:
         common.append("--no-sandbox")  # Chromium refuses to start as root otherwise
     screens = {"screens": [chrome, f"--user-data-dir={os.path.join(home, 'shell-profile')}", "--class=OSAIShell", *common,
