@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=OSAI
+Comment=AI-controlled desktop: talk to OSAI to use your computer
+Exec=/opt/osai/src/linux/osai-session
+Type=Application
+DesktopNames=OSAI

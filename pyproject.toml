@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "osai"
+version = "0.1.0"
+description = "OSAI - an AI-controlled operating environment driven by voice and natural language"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "anthropic>=2.3",
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.29",
+  "psutil>=5.9",
+  "pillow>=10",
+]
+
+[project.optional-dependencies]
+browser = ["playwright>=1.45"]
+desktop = ["pyautogui>=0.9", "mss>=9", "pyperclip>=1.8", "send2trash>=1.8"]
+voice = ["faster-whisper>=1.0"]
+all = ["osai[browser,desktop,voice]"]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "httpx>=0.27"]
+
+[project.scripts]
+osai = "osai.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["osai*"]
+
+[tool.setuptools.package-data]
+osai = ["web/*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]

@@ -1,0 +1,40 @@
+#!/bin/sh
+# OSAI desktop session (X11). Started by a display manager ("OSAI" session) or by startx on tty1.
+# Layout: the OSAI screen is the desktop (bottom layer, maximized), apps open above it,
+# and a small always-on-top avatar window stays visible while apps cover the screen.
+
+OSAI_PREFIX="${OSAI_PREFIX:-/opt/osai}"
+export PATH="$OSAI_PREFIX/venv/bin:$PATH"
+export OSAI_PORT="${OSAI_PORT:-8765}"
+LOG="${XDG_STATE_HOME:-$HOME/.local/state}/osai"
+mkdir -p "$LOG" "$HOME/.config/openbox"
+
+# Openbox config ships with OSAI unless the user has their own.
+[ -f "$HOME/.config/openbox/rc.xml" ] || cp "$OSAI_PREFIX/src/linux/openbox/rc.xml" "$HOME/.config/openbox/rc.xml"
+
+# Find a Chromium for the shell: system package, then OSAI's bundled one.
+if [ -z "$OSAI_CHROMIUM" ]; then
+  for c in chromium chromium-browser google-chrome google-chrome-stable; do
+    command -v "$c" >/dev/null 2>&1 && OSAI_CHROMIUM="$(command -v "$c")" && break
+  done
+  [ -z "$OSAI_CHROMIUM" ] && OSAI_CHROMIUM="$(ls -d "$OSAI_PREFIX"/browsers/chromium-*/chrome-linux*/chrome 2>/dev/null | tail -1)"
+fi
+export OSAI_CHROMIUM
+export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-$OSAI_PREFIX/browsers}"
+
+xsetroot -solid "#07060f" 2>/dev/null
+xset s off -dpms 2>/dev/null           # no blanking while OSAI is talking
+setxkbmap 2>/dev/null
+command -v picom  >/dev/null && picom -b --no-fading-openclose 2>/dev/null
+command -v dunst  >/dev/null && dunst >/dev/null 2>&1 &
+command -v nm-applet >/dev/null && nm-applet >/dev/null 2>&1 &
+# Audio: PipeWire is socket-activated by the user systemd instance; start PulseAudio if that's what exists.
+command -v pipewire >/dev/null || { command -v pulseaudio >/dev/null && pulseaudio --start 2>/dev/null; }
+
+openbox &
+WM=$!
+
+# The OSAI brain + screen. --mini adds the always-on-top avatar.
+osai --mini >>"$LOG/osai.log" 2>&1 &
+
+wait $WM

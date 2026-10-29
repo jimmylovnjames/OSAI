@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- OSAI window rules and global keys for Openbox. -->
+<openbox_config xmlns="http://openbox.org/3.4/rc">
+  <resistance><strength>10</strength><screen_edge_strength>20</screen_edge_strength></resistance>
+  <focus><focusNew>yes</focusNew><followMouse>no</followMouse></focus>
+  <placement><policy>Smart</policy><center>yes</center></placement>
+  <theme>
+    <name>Clearlooks</name>
+    <titleLayout>NLIMC</titleLayout>
+    <keepBorder>no</keepBorder>
+    <font place="ActiveWindow"><name>sans</name><size>10</size><weight>bold</weight></font>
+    <font place="InactiveWindow"><name>sans</name><size>10</size></font>
+  </theme>
+  <desktops><number>1</number></desktops>
+  <keyboard>
+    <!-- Super+Space or F9: talk to OSAI from anywhere -->
+    <keybind key="W-space"><action name="Execute"><command>curl -s -X POST http://127.0.0.1:8765/api/listen</command></action></keybind>
+    <keybind key="F9"><action name="Execute"><command>curl -s -X POST http://127.0.0.1:8765/api/listen</command></action></keybind>
+    <!-- Super: bring the OSAI screen to the front -->
+    <keybind key="W-o"><action name="Execute"><command>wmctrl -x -a OSAIShell</command></action></keybind>
+    <keybind key="A-Tab"><action name="NextWindow"/></keybind>
+    <keybind key="A-F4"><action name="Close"/></keybind>
+    <keybind key="W-Up"><action name="ToggleMaximize"/></keybind>
+    <!-- escape hatch: a terminal, even if OSAI is broken -->
+    <keybind key="C-A-t"><action name="Execute"><command>x-terminal-emulator</command></action></keybind>
+  </keyboard>
+  <mouse>
+    <context name="Frame">
+      <mousebind button="A-Left" action="Drag"><action name="Move"/></mousebind>
+      <mousebind button="A-Right" action="Drag"><action name="Resize"/></mousebind>
+    </context>
+    <context name="Titlebar">
+      <mousebind button="Left" action="Drag"><action name="Move"/></mousebind>
+      <mousebind button="Left" action="DoubleClick"><action name="ToggleMaximize"/></mousebind>
+    </context>
+    <context name="Close"><mousebind button="Left" action="Click"><action name="Close"/></mousebind></context>
+    <context name="Maximize"><mousebind button="Left" action="Click"><action name="ToggleMaximize"/></mousebind></context>
+    <context name="Iconify"><mousebind button="Left" action="Click"><action name="Iconify"/></mousebind></context>
+    <context name="Client">
+      <mousebind button="Left" action="Press"><action name="Focus"/><action name="Raise"/></mousebind>
+    </context>
+  </mouse>
+  <applications>
+    <!-- Rules apply in order and later ones win, so the catch-all comes first.
+         Ordinary apps open maximized, like a phone/tablet OS. -->
+    <application type="normal" class="*">
+      <maximized>yes</maximized>
+    </application>
+    <!-- The OSAI screen acts as the desktop: always at the bottom, fullscreen-sized, no frame. -->
+    <application class="OSAIShell">
+      <decor>no</decor><maximized>yes</maximized><layer>below</layer><skip_taskbar>yes</skip_taskbar>
+    </application>
+    <!-- The mini avatar floats above every app in the bottom-right corner. -->
+    <application class="OSAIMini">
+      <decor>no</decor><maximized>no</maximized><layer>above</layer><skip_taskbar>yes</skip_taskbar><skip_pager>yes</skip_pager>
+      <focus>no</focus><desktop>all</desktop>
+      <position force="yes"><x>-16</x><y>-16</y></position>
+      <size><width>240</width><height>300</height></size>
+    </application>
+  </applications>
+</openbox_config>

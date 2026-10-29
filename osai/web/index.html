@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>OSAI</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='44' fill='%237c5cff'/%3E%3Ccircle cx='36' cy='45' r='8' fill='white'/%3E%3Ccircle cx='64' cy='45' r='8' fill='white'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<div id="wallpaper" aria-hidden="true"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><canvas id="matrix"></canvas></div>
+
+<header id="topbar">
+  <div class="brand"><span id="status-dot" class="dot"></span><span id="brand-name">OSAI</span></div>
+  <div id="clock"></div>
+  <div class="indicators">
+    <span id="ind-net" title="Network"></span>
+    <span id="ind-bat" title="Battery"></span>
+    <span id="ind-cpu" title="CPU"></span>
+    <button id="btn-feed" class="icon-btn" title="Activity" aria-label="Activity">≡</button>
+    <button id="btn-settings" class="icon-btn" title="Settings" aria-label="Settings">⚙</button>
+  </div>
+</header>
+
+<main id="stage">
+  <div id="avatar" data-state="idle"></div>
+  <div id="caption" aria-live="polite"><div id="caption-user"></div><div id="caption-ai"></div></div>
+  <div id="approvals"></div>
+</main>
+
+<section id="cards" aria-label="Cards"></section>
+
+<aside id="feed" class="glass" aria-label="Activity">
+  <div class="feed-head"><span>Activity</span><button id="btn-reset" class="link-btn" title="Start a fresh conversation">New conversation</button></div>
+  <ol id="feed-list"></ol>
+</aside>
+
+<footer id="dock">
+  <div id="toast"></div>
+  <form id="ask" class="glass" autocomplete="off">
+    <button type="button" id="btn-mic" class="mic" title="Talk (hold Space)" aria-label="Talk"><svg viewBox="0 0 24 24" width="26" height="26"><path fill="currentColor" d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V22h2v-3.08A7 7 0 0 0 19 12h-2Z"/></svg></button>
+    <input id="input" placeholder="Ask OSAI to do anything…" aria-label="Message">
+    <button type="button" id="btn-hands" class="chip" title="Hands-free: always listening for the wake word">Hands-free</button>
+    <button type="button" id="btn-stop" class="chip stop" hidden>Stop</button>
+    <button type="submit" id="btn-send" class="send" aria-label="Send">➤</button>
+  </form>
+  <div id="hint">Click the mic or hold <kbd>Space</kbd> to talk · try “open Firefox and play lo-fi music” or “make yourself a purple cat”</div>
+</footer>
+
+<div id="settings" class="drawer glass" hidden>
+  <div class="drawer-head">
+    <nav class="tabs" role="tablist">
+      <button data-tab="avatar" class="active">Avatar</button>
+      <button data-tab="voice">Voice</button>
+      <button data-tab="brain">Brain</button>
+      <button data-tab="screen">Screen</button>
+    </nav>
+    <button id="btn-close-settings" class="icon-btn" aria-label="Close">✕</button>
+  </div>
+
+  <div class="tab" data-tab="avatar">
+    <div id="avatar-preview"></div>
+    <label>Name <input data-k="assistant_name" maxlength="24"></label>
+    <div class="field"><span>Form</span><div class="seg" data-k="avatar.form"></div></div>
+    <div class="field"><span>Eyes</span><div class="seg" data-k="avatar.eyes"></div></div>
+    <div class="field"><span>Accessory</span><div class="seg" data-k="avatar.accessory"></div></div>
+    <div class="row">
+      <label>Main color <input type="color" data-k="avatar.primary"></label>
+      <label>Glow color <input type="color" data-k="avatar.accent"></label>
+      <label class="check"><input type="checkbox" data-k="avatar.mouth"> Mouth</label>
+    </div>
+    <label>Glow <input type="range" min="0" max="1.5" step="0.05" data-k="avatar.glow"></label>
+    <label>Size <input type="range" min="0.5" max="1.6" step="0.05" data-k="avatar.size"></label>
+    <label>Personality <input data-k="avatar.personality" maxlength="160" placeholder="e.g. calm and dry-humoured butler"></label>
+    <button id="btn-random" class="chip">Surprise me</button>
+  </div>
+
+  <div class="tab" data-tab="voice" hidden>
+    <label>Voice <select data-k="voice.voice_name" id="voice-select"></select></label>
+    <label>Speed <input type="range" min="0.6" max="1.8" step="0.05" data-k="voice.rate"></label>
+    <label>Pitch <input type="range" min="0" max="2" step="0.05" data-k="voice.pitch"></label>
+    <label>Speech output <select data-k="voice.tts"><option value="auto">Auto</option><option value="browser">Browser voices</option><option value="server">On-device (Piper/espeak)</option><option value="off">Off (text only)</option></select></label>
+    <label>Speech input <select data-k="voice.stt"><option value="auto">Auto</option><option value="browser">Browser recognition</option><option value="server">On-device Whisper</option></select></label>
+    <label>Wake word <input data-k="voice.wake_word" maxlength="24"></label>
+    <label class="check"><input type="checkbox" data-k="voice.hands_free"> Hands-free on start</label>
+    <p class="muted" id="voice-caps"></p>
+    <button id="btn-test-voice" class="chip">Test voice</button>
+  </div>
+
+  <div class="tab" data-tab="brain" hidden>
+    <label>Anthropic API key <input type="password" data-k="api_key" placeholder="sk-ant-…" autocomplete="off"></label>
+    <p class="muted" id="key-status"></p>
+    <label>Model <select data-k="model">
+      <option value="claude-opus-5-5">Claude Opus 5.5 (best)</option>
+      <option value="claude-sonnet-5-5">Claude Sonnet 5.5 (faster, cheaper)</option>
+      <option value="claude-haiku-5-5">Claude Haiku 5.5 (fastest, cheapest)</option>
+      <option value="claude-fable-5-1">Claude Fable 5.1 (most capable, priciest)</option>
+    </select></label>
+    <label>Effort <select data-k="effort"><option value="low">Low - snappy</option><option value="medium">Medium</option><option value="high">High - careful</option><option value="xhigh">Extra high</option></select></label>
+    <label>Autonomy <select data-k="autonomy"><option value="ask">Ask before risky actions</option><option value="full">Full control - never ask</option></select></label>
+    <label class="check"><input type="checkbox" data-k="server_web_tools"> Web search &amp; fetch</label>
+    <label>Your name <input data-k="user_name" maxlength="40"></label>
+  </div>
+
+  <div class="tab" data-tab="screen" hidden>
+    <div class="field"><span>Wallpaper</span><div class="seg" data-k="theme.wallpaper"></div></div>
+    <label>Accent <input type="color" data-k="theme.accent"></label>
+    <label class="check"><input type="checkbox" data-k="theme.clock"> Clock</label>
+  </div>
+</div>
+
+<script type="module" src="/static/app.js"></script>
+</body>
+</html>
