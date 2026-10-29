@@ -26,7 +26,8 @@ def test_shell_risk():
 
 
 def test_run_command(tmp_path):
-    out = REGISTRY["run_command"].fn(ctx(tmp_path), command="echo osai-$((1+1))")
+    cmd = "Write-Output ('osai-' + (1+1))" if os.name == "nt" else "echo osai-$((1+1))"
+    out = REGISTRY["run_command"].fn(ctx(tmp_path), command=cmd)
     assert "osai-2" in out and "exit code 0" in out
 
 
