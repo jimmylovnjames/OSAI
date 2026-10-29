@@ -63,7 +63,7 @@ class Browser:
             if headless is None:
                 headless = not has_display()
             profile = OSAI_HOME / self.config["browser"].get("profile", "browser-profile")
-            kwargs = dict(headless=headless, viewport={"width": 1280, "height": 800}, args=["--disable-blink-features=AutomationControlled"])
+            kwargs = dict(headless=headless, viewport={"width": 1280, "height": 800}, args=["--disable-blink-features=AutomationControlled", "--password-store=basic"])
             try:
                 self._ctx = await self._pw.chromium.launch_persistent_context(str(profile), **kwargs)
             except Exception as first:

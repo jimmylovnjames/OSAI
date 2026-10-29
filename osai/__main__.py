@@ -63,7 +63,10 @@ def _open_screen(url: str, kiosk: bool, mini: bool) -> None:
     log = open(os.path.join(home, "shell.log"), "ab")
     common = ["--no-first-run", "--autoplay-policy=no-user-gesture-required", "--use-fake-ui-for-media-stream",
               "--disable-infobars", "--no-default-browser-check", "--test-type",
-              "--disable-features=Translate,MediaRouter"] + os.environ.get("OSAI_CHROMIUM_FLAGS", "").split()
+              "--disable-features=Translate,MediaRouter",
+              # Never ask a desktop keyring over D-Bus: with a session bus but no keyring service (minimal
+              # sessions, the OSAI image) Chromium blocks on those calls and the page never loads.
+              "--password-store=basic"] + os.environ.get("OSAI_CHROMIUM_FLAGS", "").split()
     if hasattr(os, "geteuid") and os.geteuid() == 0:
         common.append("--no-sandbox")  # Chromium refuses to start as root otherwise
     screens = {"screens": [chrome, f"--user-data-dir={os.path.join(home, 'shell-profile')}", "--class=OSAIShell", *common,
