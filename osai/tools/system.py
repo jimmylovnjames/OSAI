@@ -12,6 +12,14 @@ from ..osinfo import IS_LINUX, IS_MAC, IS_WINDOWS, as_quote, osascript, powershe
 from .base import ToolError, tool
 
 
+def _online() -> bool:
+    """A non-loopback interface that is up and has an address (cheap; no network request)."""
+    stats, addrs = psutil.net_if_stats(), psutil.net_if_addrs()
+    return any(st.isup and any(a.family.name in ("AF_INET", "AF_INET6") and not a.address.startswith(("127.", "::1", "fe80"))
+                               for a in addrs.get(name, []))
+               for name, st in stats.items() if not name.startswith(("lo", "Loopback")))
+
+
 def status_snapshot() -> dict:
     """Small status used by the UI's top bar."""
     bat = psutil.sensors_battery() if hasattr(psutil, "sensors_battery") else None
@@ -20,7 +28,7 @@ def status_snapshot() -> dict:
         "cpu": psutil.cpu_percent(interval=None),
         "mem": psutil.virtual_memory().percent,
         "battery": None if not bat else {"percent": round(bat.percent), "plugged": bat.power_plugged},
-        "online": any(s.isup for n, s in psutil.net_if_stats().items() if not n.startswith(("lo", "Loopback"))),
+        "online": _online(),
     }
 
 
